@@ -46,6 +46,10 @@ class UserService {
       access_token, refresh_token
     }
   }
+  async checkEmailExist(email: string){
+    const check = await databaseService.users.findOne({email})
+    return Boolean(check)
+  }
 }
 const userService = new UserService()
 export default userService
