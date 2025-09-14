@@ -1,6 +1,8 @@
 import { error } from 'console'
 import { Request, Response, NextFunction } from 'express'
 import { checkSchema } from 'express-validator'
+import { USER_VALID_MESSAGES } from '~/constants/messages'
+import userService from '~/services/users.services'
 import { validate } from '~/utils/validation'
 
 export const loginValidator = (req: Request, res: Response, next: NextFunction) => {
@@ -14,9 +16,14 @@ export const loginValidator = (req: Request, res: Response, next: NextFunction) 
 }
 export const registerValidator = validate(checkSchema({
   name: {
-    notEmpty: true,
-    isString: true,
+    notEmpty: {
+      errorMessage: USER_VALID_MESSAGES.NAME_REQUIRED
+    },
+    isString: {
+      errorMessage: USER_VALID_MESSAGES.NAME_IS_STRING
+    },
     isLength: {
+      errorMessage: USER_VALID_MESSAGES.NAME_LENGTH,
       options: {
         min: 1,
         max: 100
@@ -25,46 +32,62 @@ export const registerValidator = validate(checkSchema({
     trim: true
   },
   email: {
-    notEmpty: true,
-    isEmail: true,
-    trim: true
+    notEmpty: {
+      errorMessage: USER_VALID_MESSAGES.EMAIL_REQUIRED
+    },
+    isEmail: {
+      errorMessage: USER_VALID_MESSAGES.EMAIL_VALID
+    },
+    trim: true,
+    custom:{
+      options: async(value) => {
+        const isExist = await userService.checkEmailExist(value)
+        if(isExist){
+          throw new Error('Email has already existed')
+        }
+        return true
+      }
+    }
   },
   password: {
-    notEmpty: true,
+    notEmpty: {
+      errorMessage: USER_VALID_MESSAGES.PASSWORD_REQUIRED
+    },
     isString: true,
     isLength: {
+      errorMessage: USER_VALID_MESSAGES.PASSWORD_LENGTH,
       options: {
         min: 6,
         max: 100
       }
     },
     isStrongPassword: {
-      errorMessage: 'Must be long at least 6 chars and have a number',
+      errorMessage: USER_VALID_MESSAGES.PASSWORD_STRONG,
       options: {
         minLength: 6,
-        minNumbers: 1
+        minNumbers: 1,
+        minSymbols:0,
+        minLowercase: 0,
+        minUppercase: 0,
       }
     }
   },
   confirm_password: {
-    notEmpty: true,
+    notEmpty: {
+      errorMessage: USER_VALID_MESSAGES.CONFIRM_PASSWORD_REQUIRED
+    },
     isString: true,
     isLength: {
+      errorMessage: USER_VALID_MESSAGES.CONFIRM_PASSWORD_LENGTH,
       options: {
         min: 6,
         max: 100
-      }
-    },
-    isStrongPassword: {
-      options: {
-        minLength: 6,
-        minNumbers: 1
       }
     },
     custom: {
       options: (value, { req }) => {
         if (value != req.body.password) {
-          throw new Error('Mật khẩu không trùng khớp!!')
+          throw new Error(USER_VALID_MESSAGES.PASSWORD_MATCHING)
         }
         return true
       }
@@ -75,7 +98,8 @@ export const registerValidator = validate(checkSchema({
       options: {
         strict: true,
         strictSeparator: true
-      }
+      },
+      errorMessage: USER_VALID_MESSAGES.DATE_VALID_ISO8601
     }
   }
 }))
