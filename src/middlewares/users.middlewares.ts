@@ -3,6 +3,7 @@ import { verify } from 'crypto'
 import { Request, Response, NextFunction } from 'express'
 import { checkSchema } from 'express-validator'
 import { JsonWebTokenError } from 'jsonwebtoken'
+import { capitalize } from 'lodash'
 import HTTP_STATUS from '~/constants/httpStatus'
 import { USER_VALID_MESSAGES } from '~/constants/messages'
 import { ErrorStatus } from '~/models/errors'
@@ -146,14 +147,12 @@ export const registerValidator = validate(checkSchema({
   }
 }, ['body']))
 
+// access token
 export const accessTokenValidator = validate(checkSchema({
   Authorization: {
-    notEmpty: {
-      errorMessage: USER_VALID_MESSAGES.ACCESS_TOKEN_REQUIRED
-    },
     custom: {
       options: async (value: string, { req }) => {
-        const access_token = value.split(' ')[1]
+        const access_token = (value || '').split(' ')[1]
         if (!access_token) {
           throw new ErrorStatus({
             message: USER_VALID_MESSAGES.ACCESS_TOKEN_REQUIRED,
@@ -161,7 +160,10 @@ export const accessTokenValidator = validate(checkSchema({
           })
         }
         try {
-          const decoded_authorization = await verifyToken({ token: access_token })
+          const decoded_authorization = await verifyToken({
+            token: access_token,
+            secretOrPublicKey: process.env.JWT_SECRET_ACCESS_TOKEN as string
+          })
             ; (req as Request).decoded_authorization = decoded_authorization
         } catch (error) {
           throw new ErrorStatus({
@@ -178,14 +180,21 @@ export const accessTokenValidator = validate(checkSchema({
 export const refreshTokenValidator = validate(
   checkSchema({
     refresh_token: {
-      notEmpty: {
-        errorMessage: USER_VALID_MESSAGES.REFRESH_TOKEN_REQUIRED
-      },
+      trim: true,
       custom: {
         options: async (value: string, { req }) => {
+          if (!value) {
+            throw new ErrorStatus({
+              message: USER_VALID_MESSAGES.REFRESH_TOKEN_REQUIRED,
+              status: HTTP_STATUS.UNAUTHORIZED
+            })
+          }
           try {
             const [decoded_refresh_token, refresh_token] = await Promise.all([
-              verifyToken({ token: value }),
+              verifyToken({
+                token: value,
+                secretOrPublicKey: process.env.JWT_SECRET_REFRESH_TOKEN as string
+              }),
               databaseService.refreshTokens.findOne({ token: value })
             ])
             if (refresh_token === null) {
@@ -194,7 +203,7 @@ export const refreshTokenValidator = validate(
                 status: HTTP_STATUS.UNAUTHORIZED
               })
             }
-            req.decoded_refresh_token = decoded_refresh_token
+            (req as Request).decoded_refresh_token = decoded_refresh_token
           } catch (error) {
             if (error instanceof JsonWebTokenError) {
               throw new ErrorStatus({
@@ -208,4 +217,64 @@ export const refreshTokenValidator = validate(
       }
     }
   }, ['body'])
+)
+
+export const emailVerifyTokenValidator = validate(
+  checkSchema({
+    email_verify_token: {
+      trim: true,
+      custom: {
+        options: async (value: string, { req }) => {
+          if (!value) {
+            throw new ErrorStatus({
+              message: USER_VALID_MESSAGES.REFRESH_TOKEN_REQUIRED,
+              status: HTTP_STATUS.UNAUTHORIZED
+            })
+          }
+          try {
+            const decoded_refresh_token = await
+              verifyToken({
+                token: value,
+                secretOrPublicKey: process.env.JWT_SECRETKEY_EMAIL_VERIFY_TOKEN as string
+              })
+
+              ; (req as Request).decoded_refresh_token = decoded_refresh_token
+          } catch (error) {
+            throw new ErrorStatus({
+              message: capitalize((error as JsonWebTokenError).message),
+              status: HTTP_STATUS.UNAUTHORIZED
+            })
+          }
+
+          return true
+        }
+      }
+    }
+  }, ['body'])
+)
+
+export const forgotPasswordValidator = validate(
+  checkSchema(
+    {
+      email: {
+        notEmpty: {
+          errorMessage: USER_VALID_MESSAGES.EMAIL_REQUIRED
+        },
+        isEmail: {
+          errorMessage: USER_VALID_MESSAGES.EMAIL_VALID
+        },
+        trim: true,
+        custom: {
+          options: async (value, { req }) => {
+            const user = await databaseService.users.findOne({ email: value })
+            if (user === null) {
+              throw new Error(USER_VALID_MESSAGES.USER_NOT_FOUND)
+            }
+            req.user = user
+            return true
+          }
+        }
+      },
+    }
+  )
 )

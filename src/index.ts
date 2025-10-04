@@ -1,6 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import userRouter from './routes/user.routes';
 import databaseService from './services/database.services';
+import { defaultErrorHandler } from './middlewares/errors.middlewares';
 
 const app = express()
 const port = 3000
@@ -13,4 +14,5 @@ databaseService.connect()
 app.listen(port, () => {
   console.log(`app running on port ${port}`)
 })
-app.use()
+app.use(defaultErrorHandler);
+
